@@ -148,4 +148,5 @@ export interface InputState {
   keys: Record<string, boolean>;
   mouse: Vector2;
   mouseDown: boolean;
+  joystick: Vector2;
 }

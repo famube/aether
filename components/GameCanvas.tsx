@@ -32,6 +32,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(0);
   
+  // Joystick State
+  const [joystickVis, setJoystickVis] = useState({ x: 0, y: 0 });
+  const joystickRef = useRef<HTMLDivElement>(null);
+
   // Initialize state with initialProfile props
   const gameStateRef = useRef<GameState>({
     player: {
@@ -64,7 +68,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
   const inputRef = useRef<InputState>({
     keys: {},
     mouse: { x: 0, y: 0 },
-    mouseDown: false
+    mouseDown: false,
+    joystick: { x: 0, y: 0 }
   });
 
   // UI Sync State
@@ -204,7 +209,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
     const playerPos = state.player.pos;
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const dist = 600 + Math.random() * 300; 
+      const dist = 700 + Math.random() * 400; 
       
       // Enemy Type Generation
       let subType: Entity['subType'] = 'BASIC';
@@ -695,10 +700,21 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
     if (input.keys['KeyA'] || input.keys['ArrowLeft']) dx -= 1;
     if (input.keys['KeyD'] || input.keys['ArrowRight']) dx += 1;
 
+    // Joystick Override/Merge
+    if (input.joystick.x !== 0 || input.joystick.y !== 0) {
+        dx += input.joystick.x;
+        dy += input.joystick.y;
+    }
+
     if (dx !== 0 || dy !== 0) {
+      // Normalize only if length > 1 (to allow analog speed control from joystick)
       const mag = Math.sqrt(dx * dx + dy * dy);
-      state.player.pos.x += (dx / mag) * currentSpeed;
-      state.player.pos.y += (dy / mag) * currentSpeed;
+      if (mag > 1) {
+          dx /= mag;
+          dy /= mag;
+      }
+      state.player.pos.x += dx * currentSpeed;
+      state.player.pos.y += dy * currentSpeed;
     }
 
     // Passive Regen
@@ -745,7 +761,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
        const m = state.minions[i];
        
        // Teleport if too far
-       if (distance(m.pos, state.player.pos) > 700) {
+       if (distance(m.pos, state.player.pos) > 800) {
           const angle = Math.random() * Math.PI * 2;
           const dist = 100;
           m.pos.x = state.player.pos.x + Math.cos(angle) * dist;
@@ -1024,8 +1040,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
                 if (state.minions.length < max) {
                     // Successful Convert
                     const enemyStats = enemy.stats!;
-                    // We copy the enemy stats but apply the minion multiplier bonuses from talents
-                    // This ensures high level enemies are strong minions
                     
                     state.minions.push({
                         id: `converted_${Date.now()}_${Math.random()}`,
@@ -1516,6 +1530,64 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
     return () => cancelAnimationFrame(requestRef.current!);
   }, [loop]);
 
+  // Joystick Handler
+  const handleJoystickMove = (e: React.TouchEvent) => {
+     e.preventDefault(); // Prevent scrolling
+     const touch = e.targetTouches[0];
+     const rect = joystickRef.current?.getBoundingClientRect();
+     if(!rect) return;
+     
+     const centerX = rect.left + rect.width / 2;
+     const centerY = rect.top + rect.height / 2;
+     const maxDist = rect.width / 2;
+     
+     let dx = touch.clientX - centerX;
+     let dy = touch.clientY - centerY;
+     const dist = Math.sqrt(dx*dx + dy*dy);
+     
+     if (dist > maxDist) {
+         dx = (dx / dist) * maxDist;
+         dy = (dy / dist) * maxDist;
+     }
+     
+     inputRef.current.joystick = { x: dx / maxDist, y: dy / maxDist };
+     setJoystickVis({ x: dx, y: dy });
+  };
+  
+  const handleJoystickEnd = () => {
+     inputRef.current.joystick = { x: 0, y: 0 };
+     setJoystickVis({ x: 0, y: 0 });
+  };
+
+  // Canvas Touch Aim Handler
+  const handleCanvasTouchMove = (e: React.TouchEvent) => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect && e.touches.length > 0) {
+         // Use first touch that IS NOT the joystick one if possible, but mostly aiming is separate
+         // For simplicity, assume right hand aiming on canvas
+         const t = e.touches[0];
+         const scaleX = CANVAS_WIDTH / rect.width;
+         const scaleY = CANVAS_HEIGHT / rect.height;
+         inputRef.current.mouse = {
+             x: (t.clientX - rect.left) * scaleX,
+             y: (t.clientY - rect.top) * scaleY
+         };
+      }
+  };
+
+  // Mouse Handler with responsive scaling
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) {
+        const scaleX = CANVAS_WIDTH / rect.width;
+        const scaleY = CANVAS_HEIGHT / rect.height;
+        inputRef.current.mouse = { 
+            x: (e.clientX - rect.left) * scaleX, 
+            y: (e.clientY - rect.top) * scaleY 
+        };
+      }
+   }, []);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
        if (e.code === 'KeyK') {
@@ -1525,12 +1597,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
        inputRef.current.keys[e.code] = true;
     };
     const handleKeyUp = (e: KeyboardEvent) => inputRef.current.keys[e.code] = false;
-    const handleMouseMove = (e: MouseEvent) => {
-       const rect = canvasRef.current?.getBoundingClientRect();
-       if (rect) {
-         inputRef.current.mouse = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-       }
-    };
+    
     const handleMouseDown = () => inputRef.current.mouseDown = true;
     const handleMouseUp = () => inputRef.current.mouseDown = false;
 
@@ -1547,7 +1614,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, []);
+  }, [handleMouseMove]);
 
   const handleTalentToggle = (id: string) => {
     const state = gameStateRef.current;
@@ -1565,8 +1632,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
        });
 
        if (hasDependents) {
-          // Cannot refund because other nodes depend on this one
-          // In a full UI we'd show a toast message here
           return; 
        }
 
@@ -1574,11 +1639,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
        state.profile.skillPoints += talent.cost;
        state.profile.unlockedTalents = state.profile.unlockedTalents.filter(tid => tid !== id);
 
-       // Immediate Stat Corrections (for flat bonuses like HP)
-       // MaxHP is mostly handled in the update loop, but we should clamp current HP immediately
-       // to prevent having more HP than Max.
        if (talent.effectType === 'STAT' && talent.stat === 'maxHp') {
-          // We let the loop recalculate proper maxHp, but we force a quick check
           const currentBonus = state.profile.unlockedTalents.reduce((acc, tid) => {
              const t = TALENT_TREE.find(node => node.id === tid);
              return acc + (t?.stat === 'maxHp' ? t.value : 0);
@@ -1611,66 +1672,128 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
     }));
   };
 
-  return (
-    <div className="relative w-full h-full">
-       <canvas 
-         ref={canvasRef}
-         width={CANVAS_WIDTH}
-         height={CANVAS_HEIGHT}
-         className="bg-slate-900 shadow-2xl rounded-lg cursor-crosshair"
-       />
-       
-       {/* HUD */}
-       <div className="absolute bottom-4 left-4 right-4 flex gap-4 text-white pointer-events-none">
-          {/* HP/Energy */}
-          <div className="flex-1 bg-slate-900/80 p-4 rounded border border-slate-700">
-             <div className="mb-2 flex justify-between text-sm font-bold">
-                <span className="text-red-400">HP {Math.floor(uiStats.hp)}/{Math.floor(uiStats.maxHp)}</span>
-                <span className="text-blue-400">MP {Math.floor(uiStats.energy)}/{Math.floor(uiStats.maxEnergy)}</span>
-             </div>
-             <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden mb-1">
-                <div className="h-full bg-red-600 transition-all duration-200" style={{ width: `${(uiStats.hp/uiStats.maxHp)*100}%`}} />
-             </div>
-             <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-600 transition-all duration-200" style={{ width: `${(uiStats.energy/uiStats.maxEnergy)*100}%`}} />
-             </div>
-          </div>
+  const handleSkillClick = (index: number) => {
+      // Auto-target nearest enemy if clicking button directly
+      const skill = gameStateRef.current.skills[index];
+      const range = skill.range || 600;
+      const target = getNearestEnemy(range);
+      activateSkill(index, target || undefined);
+  };
 
-          {/* Skills */}
-          <div className="flex gap-2 items-center bg-slate-900/80 p-2 rounded border border-slate-700">
-             {uiStats.skills.map((skill, idx) => (
-                <div key={skill.id} className={`relative w-12 h-12 flex items-center justify-center bg-slate-800 border-2 ${uiStats.activeSkillIndex === idx ? 'border-yellow-500' : 'border-slate-600'} rounded`}>
-                   <span className="text-2xl">{skill.icon}</span>
-                   <span className="absolute top-0 left-1 text-xs text-slate-400">{idx+1}</span>
-                   {skill.currentCooldown > 0 && (
-                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-xs font-bold">
-                         {Math.ceil(skill.currentCooldown / 60)}s
-                      </div>
-                   )}
-                </div>
-             ))}
-          </div>
-          
-          {/* Level/XP */}
-          <div className="bg-slate-900/80 p-4 rounded border border-slate-700 text-center min-w-[150px]">
-             <div className="text-xs text-slate-400">Level {uiStats.level}</div>
-             <div className="h-1 w-full bg-slate-700 mt-1 mb-1">
+  const toggleSkillTree = () => {
+     gameStateRef.current.isSkillTreeOpen = !gameStateRef.current.isSkillTreeOpen;
+     setUiStats(prev => ({...prev, isSkillTreeOpen: gameStateRef.current.isSkillTreeOpen}));
+  };
+
+  return (
+    <div className="relative w-full h-full flex items-center justify-center bg-slate-950 overflow-hidden touch-none">
+       {/* Canvas Container */}
+       <div className="relative w-full h-full max-h-[100dvh] flex items-center justify-center">
+         <canvas 
+           ref={canvasRef}
+           width={CANVAS_WIDTH}
+           height={CANVAS_HEIGHT}
+           className="w-full h-full object-contain bg-slate-900 shadow-2xl cursor-crosshair block"
+           onTouchStart={handleCanvasTouchMove}
+           onTouchMove={handleCanvasTouchMove}
+         />
+       </div>
+
+       {/* UI LAYER */}
+       
+       {/* 1. BOTTOM CENTER: Player Stats (HP, Mana, XP) */}
+       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-60 md:w-72 p-3 pointer-events-none z-10 flex flex-col gap-1 bg-slate-900/80 backdrop-blur-md rounded-xl border border-slate-700 shadow-2xl">
+          {/* Level & XP */}
+          <div className="flex items-center gap-2 mb-1">
+             <div className="w-6 h-6 bg-slate-800 rounded-full border border-yellow-500 flex items-center justify-center text-yellow-500 font-bold text-xs shadow-lg">
+                {uiStats.level}
+             </div>
+             <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
                 <div className="h-full bg-yellow-500" style={{ width: `${(uiStats.xp / uiStats.xpToNext) * 100}%` }} />
              </div>
-             <div className="text-xs text-yellow-300 font-bold">
-                {uiStats.skillPoints > 0 ? `${uiStats.skillPoints} SP Available (Press K)` : 'Ascension Tree (K)'}
-             </div>
+          </div>
+          
+          {/* HP */}
+          <div className="relative h-3 w-full bg-slate-900 rounded-full border border-slate-700 overflow-hidden shadow-md">
+             <div className="absolute inset-0 bg-red-900/50" />
+             <div className="absolute top-0 left-0 h-full bg-red-600 transition-all duration-200" style={{ width: `${(uiStats.hp/uiStats.maxHp)*100}%`}} />
+             <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white drop-shadow-md">
+                {Math.ceil(uiStats.hp)} / {Math.ceil(uiStats.maxHp)}
+             </span>
           </div>
 
-          <div className="bg-slate-900/80 p-4 rounded border border-slate-700 text-center">
-             <div className="text-2xl font-black text-slate-200">{uiStats.score}</div>
-             <div className="text-xs text-slate-500 uppercase">Score</div>
+          {/* Mana */}
+          <div className="relative h-2 w-full bg-slate-900 rounded-full border border-slate-700 overflow-hidden shadow-md">
+             <div className="absolute inset-0 bg-blue-900/50" />
+             <div className="absolute top-0 left-0 h-full bg-blue-600 transition-all duration-200" style={{ width: `${(uiStats.energy/uiStats.maxEnergy)*100}%`}} />
           </div>
        </div>
 
-       {/* Skill Tree Overlay */}
+       {/* 2. TOP RIGHT: Game Info & Menu */}
+       <div className="absolute top-4 right-4 flex flex-col items-end gap-2 pointer-events-none z-10">
+          <div className="text-slate-300 text-sm font-bold drop-shadow-md">Wave {uiStats.wave}</div>
+          <div className="text-yellow-400 text-xl font-black drop-shadow-md tracking-wider">{uiStats.score.toLocaleString()}</div>
+          
+          {/* Skill Tree Toggle */}
+          <button 
+            onClick={toggleSkillTree}
+            className="mt-2 pointer-events-auto bg-slate-800/80 backdrop-blur border border-slate-600 p-2 rounded-lg flex flex-col items-center gap-1 hover:bg-slate-700 active:scale-95 transition-all shadow-lg"
+          >
+             <span className="text-xs text-slate-300 font-bold">TALENTS</span>
+             {uiStats.skillPoints > 0 && (
+                <span className="bg-yellow-500 text-black text-[10px] font-bold px-1.5 rounded-full animate-pulse">
+                   {uiStats.skillPoints}
+                </span>
+             )}
+          </button>
+       </div>
+
+       {/* 3. BOTTOM LEFT: Joystick */}
+       <div 
+          className="absolute bottom-8 left-8 w-32 h-32 rounded-full bg-white/5 backdrop-blur-[2px] border border-white/10 touch-none z-20"
+          ref={joystickRef}
+          onTouchStart={handleJoystickMove}
+          onTouchMove={handleJoystickMove}
+          onTouchEnd={handleJoystickEnd}
+       >
+          <div 
+             className="absolute w-12 h-12 bg-white/30 rounded-full shadow-lg pointer-events-none transition-transform duration-75"
+             style={{ 
+               left: '50%', top: '50%', 
+               transform: `translate(-50%, -50%) translate(${joystickVis.x}px, ${joystickVis.y}px)`
+             }} 
+          />
+       </div>
+
+       {/* 4. BOTTOM RIGHT: Skills */}
+       <div className="absolute bottom-4 right-4 flex gap-2 items-end pointer-events-auto z-20">
+           {uiStats.skills.map((skill, idx) => (
+              <button 
+                key={skill.id} 
+                onClick={(e) => { e.preventDefault(); handleSkillClick(idx); }}
+                className={`
+                  relative flex items-center justify-center rounded-xl shadow-xl transition-transform active:scale-90
+                  ${uiStats.activeSkillIndex === idx ? 'border-2 border-yellow-400 shadow-yellow-500/20' : 'border border-slate-600'}
+                  w-12 h-12 bg-slate-900 md:w-14 md:h-14
+                `}
+              >
+                 <span className="text-2xl md:text-3xl">{skill.icon}</span>
+                 {/* Keybind hint (Desktop only) */}
+                 <span className="absolute top-1 left-1.5 text-[10px] text-slate-500 font-bold hidden md:block">{idx+1}</span>
+                 
+                 {/* Cooldown Overlay */}
+                 {skill.currentCooldown > 0 && (
+                    <div className="absolute inset-0 bg-black/70 rounded-xl flex items-center justify-center text-white font-bold text-lg backdrop-blur-[1px]">
+                       {Math.ceil(skill.currentCooldown / 60)}
+                    </div>
+                 )}
+              </button>
+           ))}
+       </div>
+
+       {/* Skill Tree Modal */}
        {uiStats.isSkillTreeOpen && (
-          <div className="absolute inset-0 pointer-events-auto">
+          <div className="absolute inset-0 pointer-events-auto z-50 overflow-hidden">
              <SkillTree 
                skillPoints={uiStats.skillPoints}
                unlockedTalents={uiStats.unlockedTalents}

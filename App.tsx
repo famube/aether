@@ -34,7 +34,7 @@ const App: React.FC = () => {
   };
 
   const handleLogUpdate = (msg: string) => {
-    setNarrativeLog(prev => [msg, ...prev].slice(0, 5));
+    setNarrativeLog(prev => [msg, ...prev].slice(0, 10)); // Keep history in state but only show 1
   };
 
   return (
@@ -52,18 +52,14 @@ const App: React.FC = () => {
              onLogUpdate={handleLogUpdate}
            />
            
-           {/* Narrative Log Overlay */}
-           <div className="absolute top-4 left-4 w-80 pointer-events-none">
-              <div className="flex items-center gap-2 text-purple-400 font-bold mb-2 bg-black/50 p-2 rounded w-fit">
-                 <ScrollText size={16} /> Dungeon Log
-              </div>
-              <div className="space-y-2">
-                {narrativeLog.map((log, i) => (
-                  <div key={i} className={`p-3 rounded-lg text-sm bg-black/60 backdrop-blur border-l-4 border-purple-500 text-slate-200 shadow-lg animate-in slide-in-from-left fade-in duration-300`}>
-                    {log}
-                  </div>
-                ))}
-              </div>
+           {/* Narrative Log Overlay - Top Center, Single Line */}
+           <div className="absolute top-6 left-0 w-full pointer-events-none z-30 flex justify-center px-4">
+              {narrativeLog.length > 0 && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-black/70 backdrop-blur border border-purple-500/50 text-purple-100 shadow-[0_0_15px_rgba(168,85,247,0.3)] animate-in fade-in slide-in-from-top-4 duration-300 text-center max-w-md truncate">
+                   <ScrollText size={14} className="text-purple-400 flex-shrink-0" /> 
+                   <span className="truncate">{narrativeLog[0]}</span>
+                </div>
+              )}
            </div>
         </div>
       )}

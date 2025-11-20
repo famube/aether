@@ -1,8 +1,9 @@
 
 import { ClassType, Skill, Talent } from './types';
 
-export const CANVAS_WIDTH = 1200;
-export const CANVAS_HEIGHT = 800;
+// Increased resolution to "zoom out" the view, making the world visible area larger relative to UI
+export const CANVAS_WIDTH = 1400;
+export const CANVAS_HEIGHT = 900;
 export const TILE_SIZE = 32;
 
 // Color Palette
