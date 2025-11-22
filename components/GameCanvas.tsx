@@ -456,7 +456,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
 
           const areaSize = 100 * aoeMult;
           // Count influenced by AoE
-          const dropCount = Math.floor((10 + extraProj * 2) * aoeMult);
+          const dropCount = Math.floor((10 + extraProj * 4) * aoeMult);
           
           for(let k=0; k < dropCount; k++) {
              setTimeout(() => {
@@ -475,7 +475,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
                       vel: {x: 0, y: fallSpeed},
                       radius: 2, 
                       color: COLORS.ROGUE, 
-                      lifeTime: fallDuration,
+                      lifeTime: fallDuration, 
                       maxLifeTime: fallDuration
                   });
 
@@ -635,7 +635,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
             type: EntityType.PROJECTILE,
             pos: { ...state.player.pos },
             vel: { x: Math.cos(finalAngle) * launchSpeed, y: Math.sin(finalAngle) * launchSpeed },
-            radius: isShield ? 10 : (skill.id === 'm_fire' ? 10 : (skill.id === 'n_soul' ? 6 : 4)), 
+            radius: isShield ? 14 : (skill.id === 'm_fire' ? 10 : (skill.id === 'n_soul' ? 6 : 4)), 
             color: pColor,
             ownerId: 'player', 
             damage: baseDamage,
@@ -645,7 +645,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
             rotation: finalAngle, // Initialize rotation
             rotationSpeed: isShield ? 0.3 : 0,
             isConversion: isConvert,
-            effectType: isArrow ? 'ARROW' : undefined,
+            effectType: isShield ? 'SHIELD' : (isArrow ? 'ARROW' : undefined),
             // Modifiers
             canSplit: !isConvert && canSplit, // Conversion ray shouldn't split easily
             bounces: bounceCount,
@@ -767,13 +767,39 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
           m.pos.x = state.player.pos.x + Math.cos(angle) * dist;
           m.pos.y = state.player.pos.y + Math.sin(angle) * dist;
           spawnParticle({ effectType: 'SMOKE', pos: m.pos, color: COLORS.MINION_CONVERTED, radius: 20, lifeTime: 20 });
+          m.targetId = undefined; // Reset target on teleport
        }
 
-       const target = getNearestEnemy(500); // Minion vision range
+       // --- MINION AI TARGETING (STICKINESS) ---
+       let target: Entity | undefined;
        
+       // 1. Check if current target is still valid
+       if (m.targetId) {
+          const existingTarget = state.enemies.find(e => e.id === m.targetId);
+          if (existingTarget && existingTarget.stats!.hp > 0) {
+             const dist = distance(m.pos, existingTarget.pos);
+             const maxLeash = m.behavior === 'CHASE' ? 600 : 800;
+             if (dist < maxLeash) {
+                target = existingTarget;
+             } else {
+                m.targetId = undefined; // Too far
+             }
+          } else {
+             m.targetId = undefined; // Dead or gone
+          }
+       }
+
+       // 2. Find new target if none
+       if (!target) {
+          const newTarget = getNearestEnemy(500);
+          if (newTarget) {
+             target = newTarget;
+             m.targetId = newTarget.id;
+          }
+       }
+
        // Check Buff Expiration
        if (m.buffs && m.buffs.expiresAt && state.gameTime > m.buffs.expiresAt) {
-          // Clear only expired buffs if complex, but for now clear all
           m.buffs = undefined;
        }
 
@@ -940,7 +966,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
       if (p.rotationSpeed) p.rotation = (p.rotation || 0) + p.rotationSpeed;
       
       // Trails
-      if (state.gameTime % 2 === 0) {
+      const isShield = p.effectType === 'SHIELD';
+      const trailFreq = isShield ? 6 : 2; // Reduced frequency for shield
+
+      if (state.gameTime % trailFreq === 0) {
          let trailPos = { x: p.pos.x, y: p.pos.y };
          // Offset trail for arrow to be at the tail
          if (p.effectType === 'ARROW') {
@@ -950,8 +979,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
          }
 
          spawnParticle({ 
-            effectType: 'GLOW', pos: trailPos, 
-            vel: { x: 0, y: 0 }, color: p.color, radius: p.radius, lifeTime: 10, opacity: 0.3 
+            effectType: 'GLOW', 
+            pos: trailPos, 
+            vel: { x: 0, y: 0 }, 
+            color: p.color, 
+            radius: isShield ? p.radius * 0.6 : p.radius, 
+            lifeTime: isShield ? 8 : 10, 
+            opacity: isShield ? 0.15 : 0.3 
          });
       }
 
@@ -965,18 +999,27 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
       }
 
       // MECHANIC: Splitting
-      if (p.canSplit && !p.hasSplit && p.lifeTime! < (p.maxLifeTime! * 0.7) && p.behavior !== 'BOOMERANG') {
+      if (p.canSplit && !p.hasSplit && p.lifeTime! < (p.maxLifeTime! * 0.7)) {
           p.hasSplit = true;
-          const speed = Math.sqrt(p.vel.x*p.vel.x + p.vel.y*p.vel.y);
+          let speed = Math.sqrt(p.vel.x*p.vel.x + p.vel.y*p.vel.y);
           const currentAngle = Math.atan2(p.vel.y, p.vel.x);
           const splitLevel = getMechanicValue('SPLIT'); // 1 or 2
           
+          // Boomerang speed boost on split
+          const isBoomerang = p.behavior === 'BOOMERANG';
+          if (isBoomerang) {
+             speed = 18; // Reset speed for split boomerangs so they travel out nicely
+          }
+
           // If splitLevel is 2, split into 3, else 2
           const count = splitLevel > 1 ? 3 : 2;
           const spread = 0.6;
           
           for(let k=0; k<count; k++) {
              const a = currentAngle - (spread/2) + (spread/(count-1))*k;
+             // Boomerangs need enough maxLifeTime to return
+             const newMaxLife = isBoomerang ? 60 : 30;
+
              state.projectiles.push({
                ...p,
                id: p.id + '_split_' + Math.random(),
@@ -984,7 +1027,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
                radius: p.radius * 0.8,
                damage: (p.damage || 10) * 0.7,
                hasSplit: true, // Cannot split again
-               lifeTime: 30,
+               lifeTime: newMaxLife,
+               maxLifeTime: newMaxLife,
                pos: { ...p.pos },
                rotation: a
              });
@@ -1086,7 +1130,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
 
             enemy.stats!.hp -= finalDmg;
             spawnDamageText(enemy.pos, finalDmg, didCrit);
-            spawnParticle({ effectType: 'EXPLOSION', pos: { ...enemy.pos }, radius: p.radius * 3, color: p.color, lifeTime: 15 });
+            
+            // Reduced explosion spam for boomerangs/piercing
+            if (p.behavior !== 'BOOMERANG' || state.gameTime % 5 === 0) {
+                spawnParticle({ effectType: 'EXPLOSION', pos: { ...enemy.pos }, radius: p.radius * 3, color: p.color, lifeTime: 15 });
+            }
 
             // MECHANIC: EXPLODE ON HIT
             if (p.explodeOnHit) {
@@ -1277,6 +1325,27 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
             ctx.stroke();
          }
 
+      } else if (entity.effectType === 'SHIELD') {
+         ctx.save();
+         ctx.translate(entity.pos.x, entity.pos.y);
+         ctx.rotate(entity.rotation || 0);
+         
+         // Use emoji as the graphic
+         // Scale font based on radius
+         ctx.font = `${entity.radius * 2.8}px serif`; // increased scale slightly
+         ctx.textAlign = 'center';
+         ctx.textBaseline = 'middle';
+         
+         // Shadow for depth
+         ctx.shadowColor = 'rgba(0,0,0,0.5)';
+         ctx.shadowBlur = 10;
+         ctx.shadowOffsetY = 5;
+         
+         // Draw emoji
+         // Using fillText with an emoji
+         ctx.fillText('🛡️', 0, 2); // Slight Y offset to center visually
+         
+         ctx.restore();
       } else if (entity.effectType === 'ARROW') {
          ctx.save();
          ctx.translate(entity.pos.x, entity.pos.y);
@@ -1616,53 +1685,22 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
     };
   }, [handleMouseMove]);
 
-  const handleTalentToggle = (id: string) => {
+  const handleUnlockTalent = (id: string) => {
     const state = gameStateRef.current;
     const talent = TALENT_TREE.find(t => t.id === id);
     if (!talent) return;
 
-    const isUnlocked = state.profile.unlockedTalents.includes(id);
+    if (state.profile.unlockedTalents.includes(id)) return;
+    if (talent.prereq && !state.profile.unlockedTalents.includes(talent.prereq)) return;
+    if (state.profile.skillPoints < talent.cost) return;
 
-    if (isUnlocked) {
-       // Refund Logic
-       // Check for dependent nodes that are currently unlocked
-       const hasDependents = state.profile.unlockedTalents.some(tid => {
-          const t = TALENT_TREE.find(node => node.id === tid);
-          return t?.prereq === id;
-       });
-
-       if (hasDependents) {
-          return; 
-       }
-
-       // Refund
-       state.profile.skillPoints += talent.cost;
-       state.profile.unlockedTalents = state.profile.unlockedTalents.filter(tid => tid !== id);
-
-       if (talent.effectType === 'STAT' && talent.stat === 'maxHp') {
-          const currentBonus = state.profile.unlockedTalents.reduce((acc, tid) => {
-             const t = TALENT_TREE.find(node => node.id === tid);
-             return acc + (t?.stat === 'maxHp' ? t.value : 0);
-          }, 0);
-          const newMax = CLASS_STATS[state.player.classType!].maxHp + currentBonus;
-          if (state.player.stats!.hp > newMax) {
-             state.player.stats!.hp = newMax;
-          }
-       }
-
-    } else {
-       // Unlock Logic
-       if (talent.prereq && !state.profile.unlockedTalents.includes(talent.prereq)) return;
-       if (state.profile.skillPoints < talent.cost) return;
-
-       state.profile.skillPoints -= talent.cost;
-       state.profile.unlockedTalents.push(id);
-       
-       // Immediate Bonus for flat HP
-       if (talent.effectType === 'STAT' && talent.stat === 'maxHp') {
-          state.player.stats!.hp += talent.value;
-          state.player.stats!.maxHp += talent.value;
-       }
+    state.profile.skillPoints -= talent.cost;
+    state.profile.unlockedTalents.push(id);
+    
+    // Immediate Bonus for flat HP
+    if (talent.effectType === 'STAT' && talent.stat === 'maxHp') {
+       state.player.stats!.hp += talent.value;
+       state.player.stats!.maxHp += talent.value;
     }
 
     setUiStats(prev => ({
@@ -1671,6 +1709,42 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
        unlockedTalents: [...state.profile.unlockedTalents]
     }));
   };
+
+  const handleUndoTalent = () => {
+    const state = gameStateRef.current;
+    if (state.profile.unlockedTalents.length === 0) return;
+
+    // Get the last unlocked talent
+    const lastId = state.profile.unlockedTalents[state.profile.unlockedTalents.length - 1];
+    const talent = TALENT_TREE.find(t => t.id === lastId);
+    
+    if (!talent) return;
+
+    // Refund
+    state.profile.skillPoints += talent.cost;
+    state.profile.unlockedTalents.pop();
+
+    // Revert flat HP if needed
+    if (talent.effectType === 'STAT' && talent.stat === 'maxHp') {
+       // Recalculate total maxHp bonus
+       const currentBonus = state.profile.unlockedTalents.reduce((acc, tid) => {
+          const t = TALENT_TREE.find(node => node.id === tid);
+          return acc + (t?.stat === 'maxHp' ? t.value : 0);
+       }, 0);
+       const newMax = CLASS_STATS[state.player.classType!].maxHp + currentBonus;
+       // Clamp HP if it exceeds new max
+       if (state.player.stats!.hp > newMax) {
+          state.player.stats!.hp = newMax;
+       }
+       state.player.stats!.maxHp = newMax;
+    }
+
+    setUiStats(prev => ({
+      ...prev,
+      skillPoints: state.profile.skillPoints,
+      unlockedTalents: [...state.profile.unlockedTalents]
+   }));
+  }
 
   const handleSkillClick = (index: number) => {
       // Auto-target nearest enemy if clicking button directly
@@ -1701,8 +1775,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
 
        {/* UI LAYER */}
        
-       {/* 1. BOTTOM CENTER: Player Stats (HP, Mana, XP) */}
-       <div className="absolute bottom-[15%] left-1/2 -translate-x-1/2 w-60 md:w-72 p-3 pointer-events-none z-10 flex flex-col gap-1 bg-slate-900/80 backdrop-blur-md rounded-xl border border-slate-700 shadow-2xl">
+       {/* 1. TOP LEFT: Player Stats (HP, Mana, XP) */}
+       <div className="absolute top-4 left-4 w-60 md:w-72 p-3 pointer-events-none z-10 flex flex-col gap-1 bg-slate-900/80 backdrop-blur-md rounded-xl border border-slate-700 shadow-2xl">
           {/* Level & XP */}
           <div className="flex items-center gap-2 mb-1">
              <div className="w-6 h-6 bg-slate-800 rounded-full border border-yellow-500 flex items-center justify-center text-yellow-500 font-bold text-xs shadow-lg">
@@ -1797,7 +1871,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
              <SkillTree 
                skillPoints={uiStats.skillPoints}
                unlockedTalents={uiStats.unlockedTalents}
-               onUnlock={handleTalentToggle}
+               onUnlock={handleUnlockTalent}
+               onUndo={handleUndoTalent}
                onClose={() => {
                   gameStateRef.current.isSkillTreeOpen = false;
                   setUiStats(prev => ({...prev, isSkillTreeOpen: false}));

@@ -84,6 +84,7 @@ export interface Entity {
   maxLifeTime?: number;
   behavior?: 'CHASE' | 'RANGED' | 'BOSS' | 'BOOMERANG' | 'PIERCE' | 'STATIONARY' | 'WANDER';
   isDead?: boolean;
+  targetId?: string; // For AI Stickiness
   
   // Projectile modifiers
   bounces?: number;
@@ -103,7 +104,7 @@ export interface Entity {
   // Visual Enhancements
   rotation?: number; // In radians
   rotationSpeed?: number;
-  effectType?: 'SWING' | 'EXPLOSION' | 'LIGHTNING' | 'NOVA' | 'TRAIL' | 'TEXT' | 'SMOKE' | 'SLASH' | 'GLOW' | 'WARNING' | 'ARROW_FALL' | 'ARROW' | 'WIND_RING' | 'SNOWFLAKE';
+  effectType?: 'SWING' | 'EXPLOSION' | 'LIGHTNING' | 'NOVA' | 'TRAIL' | 'TEXT' | 'SMOKE' | 'SLASH' | 'GLOW' | 'WARNING' | 'ARROW_FALL' | 'ARROW' | 'WIND_RING' | 'SNOWFLAKE' | 'SHIELD';
   targetPos?: Vector2; // For beams/lightning
   text?: string; // For floating text
   opacity?: number;
