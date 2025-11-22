@@ -3,13 +3,14 @@ import React, { useState } from 'react';
 import GameCanvas from './components/GameCanvas';
 import MainMenu from './components/MainMenu';
 import { ClassType, PlayerProfile } from './types';
-import { ScrollText } from 'lucide-react';
+import { ScrollText, MessageCircle, Copy, Check } from 'lucide-react';
 
 const App: React.FC = () => {
   const [gameStarted, setGameStarted] = useState(false);
   const [selectedClass, setSelectedClass] = useState<ClassType>(ClassType.PALADIN);
   const [gameOverData, setGameOverData] = useState<number | null>(null);
   const [narrativeLog, setNarrativeLog] = useState<string[]>([]);
+  const [copied, setCopied] = useState(false);
 
   // Persistent Profile State
   const [profile, setProfile] = useState<PlayerProfile>({
@@ -25,16 +26,37 @@ const App: React.FC = () => {
     setGameStarted(true);
     setGameOverData(null);
     setNarrativeLog([]);
+    setCopied(false);
   };
 
   const handleGameOver = (score: number, updatedProfile: PlayerProfile) => {
     setGameStarted(false);
     setGameOverData(score);
     setProfile(updatedProfile); // Save progress
+    setCopied(false);
   };
 
   const handleLogUpdate = (msg: string) => {
     setNarrativeLog(prev => [msg, ...prev].slice(0, 10)); // Keep history in state but only show 1
+  };
+
+  const handleShareWhatsapp = () => {
+    if (gameOverData === null) return;
+    const text = `I scored ${gameOverData} in Aether Chronicles! Can you beat me? ${window.location.href}`;
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleCopyLink = async () => {
+    if (gameOverData === null) return;
+    const text = `I scored ${gameOverData} in Aether Chronicles! Can you beat me? ${window.location.href}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy', err);
+    }
   };
 
   return (
@@ -69,6 +91,25 @@ const App: React.FC = () => {
            <h2 className="text-6xl font-black text-red-600 mb-4">YOU DIED</h2>
            <p className="text-2xl text-slate-300 mb-2">Final Score: <span className="text-white font-bold">{gameOverData}</span></p>
            <p className="text-sm text-slate-400 mb-8">Your soul strengthens. Progress saved.</p>
+           
+           <div className="flex gap-4 mb-8">
+             <button 
+               onClick={handleShareWhatsapp}
+               className="flex items-center gap-2 px-6 py-3 bg-[#25D366] hover:bg-[#20BA5C] text-white font-bold rounded-full transition-transform hover:scale-105 shadow-lg"
+             >
+               <MessageCircle size={20} />
+               WhatsApp
+             </button>
+             
+             <button 
+               onClick={handleCopyLink}
+               className="flex items-center gap-2 px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-full transition-transform hover:scale-105 border border-slate-500 shadow-lg"
+             >
+               {copied ? <Check size={20} /> : <Copy size={20} />}
+               {copied ? 'Copied!' : 'Copy Score'}
+             </button>
+           </div>
+
            <button 
              onClick={() => setGameOverData(null)}
              className="px-8 py-4 bg-slate-100 text-slate-900 font-bold rounded-lg hover:bg-white hover:scale-105 transition-transform"
