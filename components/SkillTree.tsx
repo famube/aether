@@ -28,20 +28,20 @@ const SkillTree: React.FC<SkillTreeProps> = ({ skillPoints, unlockedTalents, onU
   };
 
   return (
-    <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-200">
-      <div className="w-[800px] h-[600px] bg-slate-900 border-2 border-slate-600 rounded-2xl shadow-2xl p-8 relative flex flex-col">
+    <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-200 p-4">
+      <div className="w-[680px] h-[510px] bg-slate-900 border-2 border-slate-600 rounded-2xl shadow-2xl p-6 relative flex flex-col max-w-full max-h-full">
         
         {/* Header */}
-        <div className="flex justify-between items-center mb-8 border-b border-slate-700 pb-4">
+        <div className="flex justify-between items-center mb-6 border-b border-slate-700 pb-3">
           <div>
-            <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500">
+            <h2 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500">
               Ascension Grid
             </h2>
-            <p className="text-slate-400 text-sm">Enhance your abilities with Aether energy.</p>
+            <p className="text-slate-400 text-xs md:text-sm">Enhance your abilities with Aether energy.</p>
           </div>
           <div className="text-right">
-            <div className="text-sm text-slate-400 uppercase tracking-wider">Available Points</div>
-            <div className="text-4xl font-black text-yellow-400 drop-shadow-glow">{skillPoints}</div>
+            <div className="text-xs text-slate-400 uppercase tracking-wider">Available Points</div>
+            <div className="text-3xl md:text-4xl font-black text-yellow-400 drop-shadow-glow">{skillPoints}</div>
           </div>
         </div>
 
@@ -128,13 +128,13 @@ const SkillTree: React.FC<SkillTreeProps> = ({ skillPoints, unlockedTalents, onU
           </div>
         </div>
 
-        <div className="mt-6 text-center text-slate-500 text-sm">
+        <div className="mt-4 text-center text-slate-500 text-xs">
           Press <kbd className="px-2 py-1 bg-slate-800 rounded border border-slate-700 font-mono text-slate-300">K</kbd> to Close
         </div>
         
         <button 
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-white"
+          className="absolute top-3 right-4 text-slate-400 hover:text-white text-xl p-2"
         >
           ✕
         </button>

@@ -1702,7 +1702,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
        {/* UI LAYER */}
        
        {/* 1. BOTTOM CENTER: Player Stats (HP, Mana, XP) */}
-       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-60 md:w-72 p-3 pointer-events-none z-10 flex flex-col gap-1 bg-slate-900/80 backdrop-blur-md rounded-xl border border-slate-700 shadow-2xl">
+       <div className="absolute bottom-[15%] left-1/2 -translate-x-1/2 w-60 md:w-72 p-3 pointer-events-none z-10 flex flex-col gap-1 bg-slate-900/80 backdrop-blur-md rounded-xl border border-slate-700 shadow-2xl">
           {/* Level & XP */}
           <div className="flex items-center gap-2 mb-1">
              <div className="w-6 h-6 bg-slate-800 rounded-full border border-yellow-500 flex items-center justify-center text-yellow-500 font-bold text-xs shadow-lg">
@@ -1750,7 +1750,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
 
        {/* 3. BOTTOM LEFT: Joystick */}
        <div 
-          className="absolute bottom-8 left-8 w-32 h-32 rounded-full bg-white/5 backdrop-blur-[2px] border border-white/10 touch-none z-20"
+          className="absolute bottom-[15%] left-8 w-32 h-32 rounded-full bg-white/5 backdrop-blur-[2px] border border-white/10 touch-none z-20"
           ref={joystickRef}
           onTouchStart={handleJoystickMove}
           onTouchMove={handleJoystickMove}
@@ -1766,7 +1766,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
        </div>
 
        {/* 4. BOTTOM RIGHT: Skills */}
-       <div className="absolute bottom-4 right-4 flex gap-2 items-end pointer-events-auto z-20">
+       <div className="absolute bottom-[15%] right-4 flex gap-2 items-end pointer-events-auto z-20">
            {uiStats.skills.map((skill, idx) => (
               <button 
                 key={skill.id} 
