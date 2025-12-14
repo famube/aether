@@ -4,7 +4,8 @@ export enum ClassType {
   ROGUE = 'ROGUE',
   MAGE = 'MAGE',
   NECROMANCER = 'NECROMANCER',
-  PRIEST = 'PRIEST'
+  PRIEST = 'PRIEST',
+  BARBARIAN = 'BARBARIAN'
 }
 
 export enum EntityType {
@@ -97,6 +98,11 @@ export interface Entity {
   isShieldActive?: boolean;
   // Rogue specific
   isStealthed?: boolean;
+  // Barbarian specific
+  isSpinning?: boolean;
+  spinEndTime?: number;
+  spinVel?: Vector2;
+
   // Minion specific
   lastAttackTime?: number;
   buffs?: EntityBuffs; // Priest/Mage specific
@@ -104,7 +110,7 @@ export interface Entity {
   // Visual Enhancements
   rotation?: number; // In radians
   rotationSpeed?: number;
-  effectType?: 'SWING' | 'EXPLOSION' | 'LIGHTNING' | 'NOVA' | 'TRAIL' | 'TEXT' | 'SMOKE' | 'SLASH' | 'GLOW' | 'WARNING' | 'ARROW_FALL' | 'ARROW' | 'WIND_RING' | 'SNOWFLAKE' | 'SHIELD';
+  effectType?: 'SWING' | 'EXPLOSION' | 'LIGHTNING' | 'NOVA' | 'TRAIL' | 'TEXT' | 'SMOKE' | 'SLASH' | 'GLOW' | 'WARNING' | 'ARROW_FALL' | 'ARROW' | 'WIND_RING' | 'SNOWFLAKE' | 'SHIELD' | 'AXE' | 'CYCLONE';
   targetPos?: Vector2; // For beams/lightning
   text?: string; // For floating text
   opacity?: number;

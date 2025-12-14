@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import GameCanvas from './components/GameCanvas';
 import MainMenu from './components/MainMenu';
@@ -42,14 +41,14 @@ const App: React.FC = () => {
 
   const handleShareWhatsapp = () => {
     if (gameOverData === null) return;
-    const text = `I scored ${gameOverData} in Aether Chronicles! Can you beat me? ${window.location.href}`;
+    const text = `I scored ${gameOverData} in Aether Heroes! Can you beat me? ${window.location.href}`;
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
   };
 
   const handleCopyLink = async () => {
     if (gameOverData === null) return;
-    const text = `I scored ${gameOverData} in Aether Chronicles! Can you beat me? ${window.location.href}`;
+    const text = `I scored ${gameOverData} in Aether Heroes! Can you beat me? ${window.location.href}`;
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);

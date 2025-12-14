@@ -13,6 +13,7 @@ export const COLORS = {
   MAGE: '#3b82f6',    // blue-500
   NECROMANCER: '#9333ea', // purple-600
   PRIEST: '#06b6d4',  // cyan-500
+  BARBARIAN: '#ea580c', // orange-600
   MINION: '#d8b4fe',  // purple-300
   MINION_CONVERTED: '#67e8f9', // cyan-300
   ENEMY_BASIC: '#ef4444', // red-500
@@ -39,6 +40,9 @@ export const CLASS_STATS = {
   },
   [ClassType.PRIEST]: {
     hp: 200, maxHp: 200, energy: 450, maxEnergy: 450, attack: 15, defense: 20, speed: 3, critRate: 0.05, critDmg: 1.5
+  },
+  [ClassType.BARBARIAN]: {
+    hp: 300, maxHp: 300, energy: 150, maxEnergy: 150, attack: 35, defense: 15, speed: 3.5, critRate: 0.15, critDmg: 1.8
   }
 };
 
@@ -67,6 +71,11 @@ export const SKILLS: Record<ClassType, Skill[]> = {
     { id: 'pr_convert', name: 'Conversion Ray', type: 'PROJECTILE', cooldown: 100, currentCooldown: 0, energyCost: 40, description: 'Converts an enemy to fight for you', icon: '🙏', range: 500 },
     { id: 'pr_heal', name: 'Holy Mending', type: 'INSTANT', cooldown: 300, currentCooldown: 0, energyCost: 60, description: 'Heals all active minions', icon: '💚', range: 0 },
     { id: 'pr_buff', name: 'Protection Aura', type: 'BUFF', cooldown: 600, currentCooldown: 0, energyCost: 80, description: 'Minions gain Def & Dmg', icon: '🛡️', range: 0 },
+  ],
+  [ClassType.BARBARIAN]: [
+    { id: 'b_slash', name: 'Axe Slash', type: 'MELEE', cooldown: 35, currentCooldown: 0, energyCost: 10, description: 'Wide melee swing', icon: '🪓', range: 120 },
+    { id: 'b_cyclone', name: 'Cyclone', type: 'AOE', cooldown: 300, currentCooldown: 0, energyCost: 60, description: 'Spin and deal AoE damage', icon: '🌪️', range: 0 },
+    { id: 'b_throw', name: 'Axe Throw', type: 'PROJECTILE', cooldown: 50, currentCooldown: 0, energyCost: 20, description: 'Throws a heavy axe', icon: '☄️', range: 600 },
   ]
 };
 

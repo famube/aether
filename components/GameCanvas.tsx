@@ -378,14 +378,16 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
           : angle;
 
        // MELEE / INSTANT / AOE HANDLERS
-       if (skill.id === 'p_bash') {
-         const range = skill.range! * aoeMult;
+       if (skill.id === 'p_bash' || skill.id === 'b_slash') {
+         const isAxe = skill.id === 'b_slash';
+         const range = (skill.range! * aoeMult) + (isAxe ? 20 : 0);
          spawnParticle({
             effectType: 'SLASH',
             pos: { x: state.player.pos.x + Math.cos(finalAngle)*40, y: state.player.pos.y + Math.sin(finalAngle)*40 },
             rotation: finalAngle,
             lifeTime: 12,
-            radius: 60 * aoeMult
+            radius: 60 * aoeMult,
+            color: isAxe ? COLORS.BARBARIAN : '#fff'
          });
          state.screenShake = 5;
          
@@ -397,7 +399,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
                  e.vel.x += Math.cos(finalAngle) * 15; 
                  e.vel.y += Math.sin(finalAngle) * 15;
                  spawnDamageText(e.pos, baseDamage * 1.5);
-                 spawnParticle({ effectType: 'SWING', pos: e.pos, radius: 20, color: '#fff', lifeTime: 10 });
+                 spawnParticle({ effectType: 'SWING', pos: e.pos, radius: 20, color: isAxe ? COLORS.BARBARIAN : '#fff', lifeTime: 10 });
                }
             }
          });
@@ -602,12 +604,22 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
           }
           break;
        }
+
+       // BARBARIAN SKILLS
+       else if (skill.id === 'b_cyclone') {
+          // Spin mechanics
+          state.player.isSpinning = true;
+          state.player.spinEndTime = state.gameTime + 180; // 3 seconds
+          spawnParticle({ effectType: 'TEXT', pos: state.player.pos, text: "ROAR!", color: COLORS.BARBARIAN, scale: 2, lifeTime: 60, vel: {x:0, y:-1} });
+          break;
+       }
        
        // PROJECTILE HANDLERS
        else {
          const isShield = skill.id === 'p_shield';
          const isConvert = skill.id === 'pr_convert';
          const isArrow = skill.id === 'r_arrow';
+         const isAxeThrow = skill.id === 'b_throw';
 
          if (isShield) {
              state.player.isShieldActive = true;
@@ -624,28 +636,28 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
              });
          }
          
-         const launchSpeed = isShield ? 22 : (isConvert ? 14 : (isArrow ? 18 : 12)); 
+         const launchSpeed = isShield ? 22 : (isConvert ? 14 : (isArrow ? 18 : (isAxeThrow ? 16 : 12))); 
 
          // Soul Projectile behavior is WANDER
-         const behavior = isShield ? 'BOOMERANG' : (skill.id === 'n_soul' ? 'WANDER' : undefined);
-         const pColor = isShield ? '#fbbf24' : (skill.id === 'm_fire' ? '#fca5a5' : (skill.id === 'n_soul' ? '#d8b4fe' : (isConvert ? COLORS.PRIEST : (isArrow ? COLORS.ROGUE : '#f0f9ff'))));
+         const behavior = isShield ? 'BOOMERANG' : (skill.id === 'n_soul' ? 'WANDER' : (isAxeThrow ? 'PIERCE' : undefined));
+         const pColor = isShield ? '#fbbf24' : (skill.id === 'm_fire' ? '#fca5a5' : (skill.id === 'n_soul' ? '#d8b4fe' : (isConvert ? COLORS.PRIEST : (isArrow ? COLORS.ROGUE : (isAxeThrow ? COLORS.BARBARIAN : '#f0f9ff')))));
 
          state.projectiles.push({
             id: `proj_${Date.now()}_${i}`, 
             type: EntityType.PROJECTILE,
             pos: { ...state.player.pos },
             vel: { x: Math.cos(finalAngle) * launchSpeed, y: Math.sin(finalAngle) * launchSpeed },
-            radius: isShield ? 14 : (skill.id === 'm_fire' ? 10 : (skill.id === 'n_soul' ? 6 : 4)), 
+            radius: isShield ? 14 : (skill.id === 'm_fire' ? 10 : (skill.id === 'n_soul' ? 6 : (isAxeThrow ? 16 : 4))), 
             color: pColor,
             ownerId: 'player', 
-            damage: baseDamage,
+            damage: baseDamage * (isAxeThrow ? 1.5 : 1),
             lifeTime: isShield ? 70 : 60, 
             maxLifeTime: isShield ? 70 : 60,
             behavior: behavior,
             rotation: finalAngle, // Initialize rotation
-            rotationSpeed: isShield ? 0.3 : 0,
+            rotationSpeed: isShield ? 0.3 : (isAxeThrow ? 0.5 : 0),
             isConversion: isConvert,
-            effectType: isShield ? 'SHIELD' : (isArrow ? 'ARROW' : undefined),
+            effectType: isShield ? 'SHIELD' : (isArrow ? 'ARROW' : (isAxeThrow ? 'AXE' : undefined)),
             // Modifiers
             canSplit: !isConvert && canSplit, // Conversion ray shouldn't split easily
             bounces: bounceCount,
@@ -687,34 +699,101 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
     state.gameTime++;
     if (state.screenShake > 0) state.screenShake *= 0.9;
 
-    // 1. Player Movement
+    // 1. Player Movement & State
     const baseSpeed = CLASS_STATS[state.player.classType!].speed;
     const speedMult = getStatMultiplier('speed');
     const currentSpeed = baseSpeed * speedMult;
 
-    let dx = 0;
-    let dy = 0;
+    // Spin Logic (Barbarian)
+    if (state.player.isSpinning) {
+       if (state.gameTime > (state.player.spinEndTime || 0)) {
+          state.player.isSpinning = false;
+       } else {
+          // Dynamic Movement Logic - Chase Nearest Enemy
+          const nearest = getNearestEnemy(400);
+          const spinSpeed = 2.0; // Fixed spin movement speed
+          
+          if (nearest) {
+             const angle = Math.atan2(nearest.pos.y - state.player.pos.y, nearest.pos.x - state.player.pos.x);
+             state.player.pos.x += Math.cos(angle) * spinSpeed;
+             state.player.pos.y += Math.sin(angle) * spinSpeed;
+          } else {
+             // Fallback: Use Input or last velocity drift
+             const ix = input.joystick.x || (input.keys['KeyD'] ? 1 : 0) - (input.keys['KeyA'] ? 1 : 0);
+             const iy = input.joystick.y || (input.keys['KeyS'] ? 1 : 0) - (input.keys['KeyW'] ? 1 : 0);
+             
+             if (ix !== 0 || iy !== 0) {
+                 const angle = Math.atan2(iy, ix);
+                 state.player.pos.x += Math.cos(angle) * spinSpeed * 0.8;
+                 state.player.pos.y += Math.sin(angle) * spinSpeed * 0.8;
+             } else {
+                 // Forward drift
+                 state.player.pos.x += Math.cos(state.player.rotation || 0) * spinSpeed * 0.5;
+                 state.player.pos.y += Math.sin(state.player.rotation || 0) * spinSpeed * 0.5;
+             }
+          }
 
-    if (input.keys['KeyW'] || input.keys['ArrowUp']) dy -= 1;
-    if (input.keys['KeyS'] || input.keys['ArrowDown']) dy += 1;
-    if (input.keys['KeyA'] || input.keys['ArrowLeft']) dx -= 1;
-    if (input.keys['KeyD'] || input.keys['ArrowRight']) dx += 1;
+          // Calculate AoE Radius
+          const aoeBonus = getMechanicValue('AOE_SIZE');
+          const baseRadius = 90;
+          const radius = baseRadius * (1 + aoeBonus);
+          
+          // Persistent Visual - Spawn frequent particles that fade out
+          if (state.gameTime % 4 === 0) {
+             spawnParticle({ 
+                effectType: 'CYCLONE', 
+                pos: { ...state.player.pos }, 
+                radius: radius, 
+                color: 'rgba(255,255,255,0.1)', 
+                lifeTime: 10,
+                maxLifeTime: 10,
+                rotation: state.gameTime * 0.2
+             });
+          }
 
-    // Joystick Override/Merge
-    if (input.joystick.x !== 0 || input.joystick.y !== 0) {
-        dx += input.joystick.x;
-        dy += input.joystick.y;
-    }
+          if (state.gameTime % 10 === 0) {
+             const dmg = state.player.stats!.attack * 0.6;
+             state.enemies.forEach(e => {
+                if (distance(state.player.pos, e.pos) < radius) {
+                   e.stats!.hp -= dmg;
+                   spawnDamageText(e.pos, dmg);
+                   // Slight Knockback
+                   const a = Math.atan2(e.pos.y - state.player.pos.y, e.pos.x - state.player.pos.x);
+                   e.pos.x += Math.cos(a) * 10;
+                   e.pos.y += Math.sin(a) * 10;
+                }
+             });
+          }
+       }
+    } else {
+       // Standard Movement
+       let dx = 0;
+       let dy = 0;
 
-    if (dx !== 0 || dy !== 0) {
-      // Normalize only if length > 1 (to allow analog speed control from joystick)
-      const mag = Math.sqrt(dx * dx + dy * dy);
-      if (mag > 1) {
-          dx /= mag;
-          dy /= mag;
-      }
-      state.player.pos.x += dx * currentSpeed;
-      state.player.pos.y += dy * currentSpeed;
+       if (input.keys['KeyW'] || input.keys['ArrowUp']) dy -= 1;
+       if (input.keys['KeyS'] || input.keys['ArrowDown']) dy += 1;
+       if (input.keys['KeyA'] || input.keys['ArrowLeft']) dx -= 1;
+       if (input.keys['KeyD'] || input.keys['ArrowRight']) dx += 1;
+
+       // Joystick Override/Merge
+       if (input.joystick.x !== 0 || input.joystick.y !== 0) {
+           dx += input.joystick.x;
+           dy += input.joystick.y;
+       }
+
+       if (dx !== 0 || dy !== 0) {
+         // Normalize
+         const mag = Math.sqrt(dx * dx + dy * dy);
+         if (mag > 1) { dx /= mag; dy /= mag; }
+         
+         // Update Velocity for Drift
+         state.player.vel = { x: dx * currentSpeed, y: dy * currentSpeed };
+
+         state.player.pos.x += dx * currentSpeed;
+         state.player.pos.y += dy * currentSpeed;
+       } else {
+         state.player.vel = { x: 0, y: 0 };
+       }
     }
 
     // Passive Regen
@@ -743,6 +822,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
     });
 
     // 2. Input & Auto-Attack
+    // Disable skills while spinning? No, let them spin and cast!
     if (input.keys['Digit1']) activateSkill(0);
     if (input.keys['Digit2']) activateSkill(1);
     if (input.keys['Digit3']) activateSkill(2);
@@ -1132,7 +1212,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
             spawnDamageText(enemy.pos, finalDmg, didCrit);
             
             // Reduced explosion spam for boomerangs/piercing
-            if (p.behavior !== 'BOOMERANG' || state.gameTime % 5 === 0) {
+            if ((p.behavior !== 'BOOMERANG' && p.behavior !== 'PIERCE') || state.gameTime % 5 === 0) {
                 spawnParticle({ effectType: 'EXPLOSION', pos: { ...enemy.pos }, radius: p.radius * 3, color: p.color, lifeTime: 15 });
             }
 
@@ -1163,11 +1243,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
                  p.rotation = (p.rotation || 0) + Math.PI;
                }
                hit = false; // Keep projectile alive
-            } else if (p.behavior !== 'BOOMERANG') {
+            } else if (p.behavior !== 'BOOMERANG' && p.behavior !== 'PIERCE') {
                state.projectiles.splice(i, 1);
                j = state.enemies.length; // break inner
             }
-            if (hit && p.behavior !== 'BOOMERANG') break;
+            if (hit && p.behavior !== 'BOOMERANG' && p.behavior !== 'PIERCE') break;
           }
         }
       } else if (p.ownerId === 'enemy') {
@@ -1193,8 +1273,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
     for (let i = state.particles.length - 1; i >= 0; i--) {
        const part = state.particles[i];
        part.lifeTime = (part.lifeTime || 0) - 1;
-       part.pos.x += part.vel.x;
-       part.pos.y += part.vel.y;
+       
+       // Cyclone follows player
+       if (part.effectType === 'CYCLONE') {
+          part.pos.x = state.player.pos.x;
+          part.pos.y = state.player.pos.y;
+          part.rotation = (part.rotation || 0) + 0.3;
+       } else {
+          part.pos.x += part.vel.x;
+          part.pos.y += part.vel.y;
+       }
+
        if (part.maxLifeTime) part.opacity = part.lifeTime! / part.maxLifeTime;
        if (part.lifeTime! <= 0) state.particles.splice(i, 1);
     }
@@ -1342,7 +1431,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
          ctx.shadowOffsetY = 5;
          
          // Draw emoji
-         // Using fillText with an emoji
          ctx.fillText('🛡️', 0, 2); // Slight Y offset to center visually
          
          ctx.restore();
@@ -1376,6 +1464,31 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
          ctx.stroke();
 
          ctx.restore();
+      } else if (entity.effectType === 'AXE') {
+         ctx.save();
+         ctx.translate(entity.pos.x, entity.pos.y);
+         ctx.rotate(entity.rotation || 0);
+         
+         ctx.fillStyle = '#cbd5e1'; // metal
+         // Double bit axe
+         ctx.beginPath();
+         ctx.moveTo(5, -12);
+         ctx.quadraticCurveTo(15, -15, 15, 0);
+         ctx.quadraticCurveTo(15, 15, 5, 12);
+         ctx.lineTo(5, -12);
+         // Left bit
+         ctx.moveTo(-5, -12);
+         ctx.quadraticCurveTo(-15, -15, -15, 0);
+         ctx.quadraticCurveTo(-15, 15, -5, 12);
+         ctx.lineTo(-5, -12);
+         ctx.fill();
+         
+         // Handle
+         ctx.fillStyle = '#78350f'; // wood
+         ctx.fillRect(-4, -4, 8, 30);
+         
+         ctx.restore();
+
       } else {
          // Standard rendering for others (Player, Projectiles, Generic Minions)
          ctx.fillStyle = entity.color;
@@ -1509,14 +1622,49 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ selectedClass, initialProfile, 
            ctx.stroke();
            
            ctx.restore();
-       } else if (p.effectType === 'WIND_RING') {
+       } else if (p.effectType === 'WIND_RING' || p.effectType === 'CYCLONE') {
            ctx.beginPath();
-           ctx.strokeStyle = p.color; 
-           ctx.lineWidth = 2;
-           // Expand radius over time
-           const expansion = (p.maxLifeTime! - p.lifeTime!) * 3;
-           ctx.arc(p.pos.x, p.pos.y, p.radius + expansion, 0, Math.PI * 2);
-           ctx.stroke();
+           
+           if (p.effectType === 'CYCLONE') {
+               // Rotating semi-transparent white circles
+               const r = p.radius;
+               ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+               ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+               ctx.lineWidth = 2;
+               
+               // Filled circle background (AoE)
+               ctx.beginPath();
+               ctx.arc(p.pos.x, p.pos.y, r, 0, Math.PI * 2);
+               ctx.fill();
+               ctx.stroke();
+               
+               // Rotating inner wind arcs
+               ctx.save();
+               ctx.translate(p.pos.x, p.pos.y);
+               ctx.rotate(p.rotation || 0);
+               
+               ctx.beginPath();
+               // Draw 3 spiral arms
+               for(let k=0; k<3; k++) {
+                   ctx.rotate((Math.PI * 2) / 3);
+                   ctx.moveTo(r * 0.4, 0);
+                   ctx.arc(0, 0, r * 0.6, 0, 1.5);
+                   ctx.moveTo(r * 0.7, 0);
+                   ctx.arc(0, 0, r * 0.9, 0, 1.0);
+               }
+               ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+               ctx.lineWidth = 2;
+               ctx.stroke();
+               ctx.restore();
+               
+           } else {
+               // Wind Ring Expansion
+               ctx.strokeStyle = p.color;
+               ctx.lineWidth = 2;
+               const expansion = (p.maxLifeTime! - p.lifeTime!) * 3;
+               ctx.arc(p.pos.x, p.pos.y, p.radius + expansion, 0, Math.PI * 2);
+               ctx.stroke();
+           }
        } else if (p.effectType === 'SNOWFLAKE') {
            ctx.save();
            ctx.translate(p.pos.x, p.pos.y);
